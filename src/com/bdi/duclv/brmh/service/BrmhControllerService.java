@@ -1,16 +1,21 @@
 package com.bdi.duclv.brmh.service;
 
+import java.io.OutputStreamWriter;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+
+import javax.servlet.http.HttpServletResponse;
 
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -60,12 +65,12 @@ public class BrmhControllerService {
 				System.out.println("Connection to DB successful!");
 				// make query to get count by time and section
 				StringBuilder query = new StringBuilder(
-						"SELECT count(DISTINCT mac_address), section_id FROM tracking WHERE 1=1 ");
-				query.append("AND update_time >= ? AND update_time <= ? ");
+						"SELECT count(DISTINCT mobile_mac), location FROM wifi_backup.mobile_location WHERE 1=1 ");
+				query.append("AND time >= ? AND time <= ? ");
 				if(pSectionId > 0) {
-					query.append("AND section_id = ? ");
+					query.append("AND location = ? ");
 				}
-				query.append("GROUP BY section_id ");
+				query.append("GROUP BY location ");
 				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
 				stmt.setTimestamp(1, new Timestamp(fromTime));
 				stmt.setTimestamp(2, new Timestamp(toTime));
@@ -126,12 +131,12 @@ public class BrmhControllerService {
 				System.out.println("Connection to DB successful!");
 				// make query to get count by time and section
 				StringBuilder query = new StringBuilder(
-						"SELECT mac_address, update_time, section_id FROM tracking WHERE 1=1 ");
-				query.append("AND update_time >= ? AND update_time <= ? ");
+						"SELECT mobile_mac, time, location FROM wifi_backup.mobile_location WHERE 1=1 ");
+				query.append("AND time >= ? AND time <= ? ");
 				if(pSectionId > 0) {
-					query.append("AND section_id = ? ");
+					query.append("AND location = ? ");
 				}
-				query.append("ORDER BY update_time ASC ");
+				query.append("ORDER BY time ASC ");
 				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
 				stmt.setTimestamp(1, new Timestamp(pFromTime));
 				stmt.setTimestamp(2, new Timestamp(pToTime));
@@ -168,15 +173,515 @@ public class BrmhControllerService {
 						//reassign first time to current time variable
 						firstTime = ts;
 					}
-					System.out.println("mac= " + key + ". Period of time= " + periodOfTime);
+					//System.out.println("mac= " + key + ". Period of time= " + periodOfTime);
 					//add to result
 					TrackingEntity tracking = new TrackingEntity();
 					tracking.setMacAddress(key);
 					tracking.setSectionId(pSectionId);
-					tracking.setFirstTime(timeInSection.get(0));
+					tracking.setFirstTime(timeInSection.getFirst());
+					tracking.setLastTime(timeInSection.getLast());
 					tracking.setPeriodOfTime(periodOfTime);
 					result.add(tracking);
 				}
+				
+			} catch (SQLException e) {
+				e.printStackTrace();
+				System.err.println("Query failed!");
+			}
+			finally {
+				try {
+					dBConn.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		return result;
+	}
+	
+	@RequestMapping(method = RequestMethod.GET, value = "/getSectionsOfPatient")
+	public List<TrackingEntity> getSectionsOfPatient(
+			@RequestParam(required=true, name="fromTime") Long fromTime,
+			@RequestParam(required=true, name="toTime") Long toTime,
+			@RequestParam(required=true, name="macAddress") String pMacAddress) {
+		
+		//result to return
+		List<TrackingEntity> result = new ArrayList<>();
+		//clean input
+		if(fromTime == null) {
+			fromTime = 0L;
+		}
+		if(toTime == null) {
+			toTime = System.currentTimeMillis();
+		}
+		
+		Connection dBConn = getDBConnection();
+		if (dBConn != null) {
+			try {
+				System.out.println("Connection to DB successful!");
+				// make query to get section list of this patient
+				StringBuilder query = new StringBuilder(
+						"SELECT DISTINCT location FROM wifi_backup.mobile_location WHERE 1=1 ");
+				query.append("AND time >= ? AND time <= ? ");
+				query.append("AND mobile_mac = ? ");
+				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
+				stmt.setTimestamp(1, new Timestamp(fromTime));
+				stmt.setTimestamp(2, new Timestamp(toTime));
+				stmt.setString(3, pMacAddress);
+				
+				ResultSet resultSet = stmt.executeQuery();
+				while(resultSet.next()) {
+					int sectionId = resultSet.getInt(1);
+					//add to result
+					TrackingEntity tracking = new TrackingEntity();
+					tracking.setSectionId(sectionId);
+					result.add(tracking);
+				}
+				resultSet.close();
+				stmt.close();
+				
+			} catch (SQLException e) {
+				e.printStackTrace();
+				System.err.println("Query failed!");
+			}
+			finally {
+				try {
+					dBConn.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		return result;
+	}
+	
+	@RequestMapping(method = RequestMethod.GET, value = "/inspectMac")
+	public List<InspectEntity> inspectMac(
+			@RequestParam(required=true, name="fromTime") Long pFromTime,
+			@RequestParam(required=true, name="toTime") Long pToTime,
+			@RequestParam(required=true, name="macAddress") String pMacAddress) {
+		
+		//result to return
+		List<InspectEntity> result = new ArrayList<>();
+		//clean input
+		if(pFromTime == null) {
+			pFromTime = 0L;
+		}
+		if(pToTime == null) {
+			pToTime = System.currentTimeMillis();
+		}
+		
+		Connection dBConn = getDBConnection();
+		if (dBConn != null) {
+			try {
+				System.out.println("Connection to DB successful!");
+				// make query to get detail by time and section
+				StringBuilder query = new StringBuilder(
+						"SELECT location, time FROM wifi_backup.mobile_location WHERE 1=1 ");
+				query.append("AND time >= ? AND time <= ? ");
+				query.append("AND mobile_mac = ? ");
+				query.append("ORDER BY time DESC ");
+				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
+				stmt.setTimestamp(1, new Timestamp(pFromTime));
+				stmt.setTimestamp(2, new Timestamp(pToTime));
+				stmt.setString(3, pMacAddress);
+				
+				//store time in section
+				LinkedList<TrackingEntity> llTimeInSection = new LinkedList<>();
+				//get result
+				ResultSet rs = stmt.executeQuery();
+				while(rs.next()) {
+					int sectionId = rs.getInt(1);
+					Timestamp updateTime = rs.getTimestamp(2);
+					//store to process later
+					TrackingEntity tracking = new TrackingEntity();
+					tracking.setSectionId(sectionId);
+					tracking.setUpdateTime(updateTime);
+					llTimeInSection.add(tracking);
+				}
+				rs.close();
+				stmt.close();
+				
+				//process to get period of time of patient in each section
+				//algorithm: go through all time in one section until reach other section
+				//exception: there are some sudden change in section because sudden change
+				//in wifi signal between AP (e.g: 777272777)-> use a count variable to detect
+				int detectLimit = 2; //count limit to detect sudden change
+				int count = 0;
+				int preSection = 0;
+				List<TrackingEntity> omitList = new ArrayList<>();
+				int llTimeInSectionSize = llTimeInSection.size();
+				for(int i = 0; i < llTimeInSectionSize; i++) {
+					TrackingEntity tracking = llTimeInSection.get(i);
+					int sectionId = tracking.getSectionId();
+					//assign the first
+					if(preSection == 0) {
+						preSection = sectionId;
+					}
+					if(sectionId != preSection) {
+						//check if previous count <= detect limit => add to omitList
+						if(count <= detectLimit) {
+							for(int j = 1; j <= count; j++) {
+								omitList.add(llTimeInSection.get(i - j));
+							}
+						}
+						preSection = sectionId;
+						count = 1;
+					} else {
+						//increase count
+						count++;
+					}
+				}
+				//check the last element
+				if(count <= detectLimit) {
+					for(int j = 1; j <= count; j++) {
+						omitList.add(llTimeInSection.get(llTimeInSectionSize - j));
+					}
+				}
+				//remove omit element
+				llTimeInSection.removeAll(omitList);
+				
+				//process data to get the result
+				preSection = 0;
+				Timestamp toTime = null;
+				Timestamp fromTime = null;
+				List<Integer> sectionList = new ArrayList<>();
+				llTimeInSectionSize = llTimeInSection.size();
+				for(int i = 0; i < llTimeInSectionSize; i++) {
+					TrackingEntity tracking = llTimeInSection.get(i);
+					int sectionId = tracking.getSectionId();
+					//assign the first
+					if(preSection == 0) {
+						preSection = sectionId;
+						toTime = tracking.getUpdateTime();
+						fromTime = toTime;
+					}
+					//reach other section -> add to result previous section
+					if(sectionId != preSection) {
+						//update result of previous section
+						InspectEntity inspect = new InspectEntity();
+						inspect.setSectionId(preSection);
+						inspect.setFromTime(fromTime);
+						inspect.setToTime(toTime);
+						result.add(inspect);
+						//reset previous section, toTime
+						preSection = sectionId;
+						toTime = tracking.getUpdateTime();
+						fromTime = toTime;
+						sectionList.add(preSection);
+					}
+					//otherwise set fromTime to find the last from time
+					else {
+						fromTime = tracking.getUpdateTime();
+					}
+					//if the last element -> add to result
+					if(i == llTimeInSectionSize - 1) {
+						InspectEntity inspect = new InspectEntity();
+						inspect.setSectionId(sectionId);
+						inspect.setFromTime(fromTime);
+						inspect.setToTime(toTime);
+						//set section list
+						sectionList.add(preSection);
+						inspect.setSectionList(sectionList);
+						result.add(inspect);
+					}
+				}
+				
+			} catch (SQLException e) {
+				e.printStackTrace();
+				System.err.println("Query failed!");
+			}
+			finally {
+				try {
+					dBConn.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		return result;
+	}
+	
+	@RequestMapping(method = RequestMethod.POST, value = "/countPeopleContacted")
+	public List<InspectEntity> countPeopleContacted(
+			@RequestParam(required=true, name="paramList") String paramList) {
+		
+		//result to return
+		List<InspectEntity> result = new LinkedList<>();
+		//split by "," to get parameters (by 3-tuples)
+		String[] params = paramList.split(",");
+		int length = params.length;
+		for(int i = 0; i < length; i+= 3) {
+			Long fromTime = Long.parseLong(params[i]);
+			Long toTime = Long.parseLong(params[i+1]);
+			Integer sectionId = Integer.parseInt(params[i+2]);
+			//get people count
+			int peopleCount = 0;
+			List<TrackingEntity> lsPeopleCount = countPeople(fromTime, toTime, sectionId);
+			if(lsPeopleCount.size() > 0) {
+				peopleCount = lsPeopleCount.get(0).getPeopleCount();
+			}
+			//add to result
+			InspectEntity inspect = new InspectEntity();
+			inspect.setPeopleContacted((peopleCount <= 0) ? 0 : peopleCount - 1);
+			result.add(inspect);
+		}
+		
+		return result;
+	}
+	
+	@RequestMapping(method = RequestMethod.POST, value = "/exportPeopleContacted", 
+			produces="text/csv")
+	public void exportPeopleContacted(
+			@RequestParam(required=true, name="paramList") String paramList,
+			@RequestParam(required=true, name="inspectMac") String inspectMac,
+			@RequestParam(required=false, name="fromTime") Long pFromTime,
+			@RequestParam(required=false, name="toTime") Long pToTime,
+			@RequestParam(required=true, name="level") int level,
+			HttpServletResponse response) {
+		
+		//clean input
+		if(level < 1) {
+			level = 1; //default export 1-level
+		}
+		//define 3 maximum level
+		List<String> lsMacInLevel1 = new ArrayList<>();
+		List<String> lsMacInLevel2 = new ArrayList<>();
+		List<String> lsMacInLevel3 = new ArrayList<>();
+		List<String> lsMacExisted = new ArrayList<>();
+		lsMacInLevel1.add(inspectMac); // level 1 is original Mac
+		lsMacExisted.addAll(lsMacInLevel1);
+		
+		//result to export
+		List<ExportEntity> result = new LinkedList<>();
+		String delimeter = ",";
+		//get result of level 1
+		result = getResult2Export(paramList, inspectMac, 1, lsMacExisted, lsMacInLevel2);
+		//search for level 2
+		if(level == 2) {
+			//inspect Mac in level 2
+			if(pFromTime == null) {
+				pFromTime = System.currentTimeMillis();
+			}
+			if(pToTime == null) {
+				pToTime = System.currentTimeMillis();
+			}
+			lsMacExisted.addAll(lsMacInLevel2);
+			//loop through each mac address in level 2
+			for(String inspectMac2 : lsMacInLevel2) {
+				List<InspectEntity> lsInspectLevel2 = inspectMac(pFromTime, pToTime, inspectMac2);
+				//make paramList
+				StringBuilder paramList2 = new StringBuilder();
+				for(InspectEntity inspect2 : lsInspectLevel2) {
+					paramList2.append(inspect2.getFromTime().getTime()).append(delimeter)
+								.append(inspect2.getToTime().getTime()).append(delimeter)
+								.append(inspect2.getSectionId()).append(delimeter);
+				}
+				//get result to export level 2
+				List<ExportEntity> result2 = getResult2Export(paramList2.toString(), inspectMac2, 2, lsMacExisted, lsMacInLevel3);
+				//add to result
+				result.addAll(result2);
+			}
+		}
+		//export to csv file
+		String fileName = "patientInspect_" + System.currentTimeMillis() + ".csv";
+		try {
+			response.setContentType("text/csv");
+			response.setHeader("Content-Disposition", "attachment; filename=" + fileName);
+			OutputStreamWriter writer = new OutputStreamWriter(response.getOutputStream(), "UTF-8");
+			String exportDelimeter = ",";
+			String newLine = "\n";
+			StringBuilder out = new StringBuilder();
+			//header
+			out.append("Level").append(exportDelimeter).append("Inspect Mac").append(exportDelimeter)
+				.append("Contacted Mac").append(exportDelimeter).append("Section Id").append(exportDelimeter)
+				.append("From Time").append(exportDelimeter).append("To Time").append(newLine);
+			writer.write(out.toString());
+			//data
+			SimpleDateFormat dfm = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA);
+			for(ExportEntity export : result) {
+				out = new StringBuilder();
+				out.append(export.getLevel()).append(exportDelimeter)
+					.append(export.getInspectMac()).append(exportDelimeter)
+					.append(export.getContactedMac()).append(exportDelimeter)
+					.append(export.getSectionId()).append(exportDelimeter)
+					.append(dfm.format(export.getFromTime())).append(exportDelimeter)
+					.append(dfm.format(export.getToTime())).append(newLine);
+				writer.write(out.toString());
+			}
+			writer.flush();
+			writer.close();
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+	
+	private List<ExportEntity> getResult2Export(String paramList, String inspectMac, 
+			int level, List<String> lsMacInPreviousLevel, List<String> lsMacInNextLevel) {
+		//result to export
+		List<ExportEntity> result = new LinkedList<>();
+		//split by "," to get parameters (by 3-tuples)
+		String delimeter = ",";
+		String[] params = paramList.split(delimeter);
+		int length = params.length;
+		for(int i = 0; length >= 3 && i < length; i+= 3) {
+			Long fromTime = Long.parseLong(params[i]);
+			Long toTime = Long.parseLong(params[i+1]);
+			Integer sectionId = Integer.parseInt(params[i+2]);
+			//get people detail
+			List<TrackingEntity> lsPeopleContacted = getPeopleDetail(fromTime, toTime, sectionId);
+			//add to result 
+			for(TrackingEntity peopleContacted : lsPeopleContacted) {
+				ExportEntity export = new ExportEntity();
+				export.setInspectMac(inspectMac);
+				String contactedMac = peopleContacted.getMacAddress();
+				//by pass if this mac address existed in previous list
+				if(lsMacInPreviousLevel.contains(contactedMac)) {
+					continue;
+				}
+				export.setContactedMac(contactedMac);
+				//add to next level
+				if(!lsMacInNextLevel.contains(contactedMac)) {
+					lsMacInNextLevel.add(contactedMac);
+				}
+				export.setSectionId(peopleContacted.getSectionId());
+				export.setFromTime(peopleContacted.getFirstTime());
+				export.setToTime(peopleContacted.getLastTime());
+				export.setLevel(level);
+				result.add(export);
+			}
+		}
+		return result;
+	}
+	
+	@RequestMapping(method = RequestMethod.GET, value = "/inspectSection")
+	public List<TrackingEntity> inspectSection(
+			@RequestParam(required=true, name="fromTime") Long pFromTime,
+			@RequestParam(required=true, name="toTime") Long pToTime,
+			@RequestParam(required=true, name="sectionId") int pSectionId) {
+		
+		//result to return
+		List<TrackingEntity> result = new ArrayList<>();
+		//clean input
+		if(pFromTime == null) {
+			pFromTime = 0L;
+		}
+		if(pToTime == null) {
+			pToTime = System.currentTimeMillis();
+		}
+		
+		Connection dBConn = getDBConnection();
+		if (dBConn != null) {
+			try {
+				System.out.println("Connection to DB successful!");
+				// make query to get detail by time and section
+				StringBuilder query = new StringBuilder(
+						"SELECT mobile_mac, time FROM wifi_backup.mobile_location WHERE 1=1 ");
+				query.append("AND time >= ? AND time <= ? ");
+				query.append("AND location = ? ");
+				query.append("ORDER BY time ASC ");
+				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
+				stmt.setTimestamp(1, new Timestamp(pFromTime));
+				stmt.setTimestamp(2, new Timestamp(pToTime));
+				stmt.setInt(3, pSectionId);
+				
+				//store time in section for each mac address
+				Map<String, LinkedList<Timestamp>> macInSection = new HashMap<>();
+				//get result
+				ResultSet rs = stmt.executeQuery();
+				while(rs.next()) {
+					String macAddress = rs.getString(1);
+					Timestamp updateTime = rs.getTimestamp(2);
+					//add to process
+					LinkedList<Timestamp> timeInSection = macInSection.get(macAddress);
+					if(timeInSection == null) {
+						timeInSection = new LinkedList<>();
+					}
+					timeInSection.add(updateTime);
+					macInSection.put(macAddress, timeInSection);
+				}
+				rs.close();
+				stmt.close();
+				//process to get period of time
+				Set<String> keySet = macInSection.keySet();
+				for(String key : keySet) {
+					LinkedList<Timestamp> timeInSection = macInSection.get(key);
+					//calculate period of time by adding all time interval
+					long periodOfTime = 0l;
+					Timestamp firstTime = timeInSection.get(0);
+					for(Timestamp ts : timeInSection) {
+						periodOfTime += ts.getTime() - firstTime.getTime();
+						//reassign first time to current time variable
+						firstTime = ts;
+					}
+					//System.out.println("mac= " + key + ". Period of time= " + periodOfTime);
+					//add to result
+					TrackingEntity tracking = new TrackingEntity();
+					tracking.setMacAddress(key);
+					tracking.setSectionId(pSectionId);
+					tracking.setPeriodOfTime(periodOfTime);
+					tracking.setFirstTime(timeInSection.getFirst());
+					tracking.setLastTime(timeInSection.getLast());
+					result.add(tracking);
+				}
+				
+			} catch (SQLException e) {
+				e.printStackTrace();
+				System.err.println("Query failed!");
+			}
+			finally {
+				try {
+					dBConn.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		return result;
+	}
+	
+	@RequestMapping(method = RequestMethod.GET, value = "/inspectTime")
+	public List<TrackingEntity> inspectTime(
+			@RequestParam(required=true, name="fromTime") Long pFromTime,
+			@RequestParam(required=true, name="toTime") Long pToTime) {
+		
+		//result to return
+		List<TrackingEntity> result = new ArrayList<>();
+		//clean input
+		if(pFromTime == null) {
+			pFromTime = 0L;
+		}
+		if(pToTime == null) {
+			pToTime = System.currentTimeMillis();
+		}
+		
+		Connection dBConn = getDBConnection();
+		if (dBConn != null) {
+			try {
+				System.out.println("Connection to DB successful!");
+				// make query to get detail by time and section
+				StringBuilder query = new StringBuilder(
+						"SELECT COUNT(DISTINCT mobile_mac), location FROM wifi_backup.mobile_location WHERE 1=1 ");
+				query.append("AND time >= ? AND time <= ? ");
+				query.append("GROUP BY location ");
+				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
+				stmt.setTimestamp(1, new Timestamp(pFromTime));
+				stmt.setTimestamp(2, new Timestamp(pToTime));
+				
+				//get result
+				ResultSet rs = stmt.executeQuery();
+				while(rs.next()) {
+					int peopleCount = rs.getInt(1);
+					int sectionId = rs.getInt(2);
+					//add to result
+					TrackingEntity tracking = new TrackingEntity();
+					tracking.setPeopleCount(peopleCount);
+					tracking.setSectionId(sectionId);
+					result.add(tracking);
+				}
+				rs.close();
+				stmt.close();
 				
 			} catch (SQLException e) {
 				e.printStackTrace();

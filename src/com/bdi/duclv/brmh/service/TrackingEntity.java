@@ -9,12 +9,11 @@ public class TrackingEntity implements Serializable{
 	private long id;
 	private String macAddress;
 	private Timestamp updateTime;
-	private long updateTimeInMilis;
 	private int sectionId;
 	private String sectionName;
 	private int peopleCount;
 	private Timestamp firstTime;
-	private long firstTimeInMilis;
+	private Timestamp lastTime;
 	private long periodOfTime;
 	
 	public long getId() {
@@ -34,12 +33,6 @@ public class TrackingEntity implements Serializable{
 	}
 	public void setUpdateTime(Timestamp updateTime) {
 		this.updateTime = updateTime;
-	}
-	public long getUpdateTimeInMilis() {
-		return (updateTime != null) ? updateTime.getTime() : 0l;
-	}
-	public void setUpdateTimeInMilis(Long updateTimeInMilis) {
-		this.updateTimeInMilis = updateTimeInMilis;
 	}
 	public int getSectionId() {
 		return sectionId;
@@ -65,17 +58,17 @@ public class TrackingEntity implements Serializable{
 	public void setFirstTime(Timestamp firstTime) {
 		this.firstTime = firstTime;
 	}
-	public long getFirstTimeInMilis() {
-		return (firstTime != null) ? firstTime.getTime() : 0l;
-	}
-	public void setFirstTimeInMilis(long firstTimeInMilis) {
-		this.firstTimeInMilis = firstTimeInMilis;
-	}
 	public long getPeriodOfTime() {
 		return periodOfTime;
 	}
 	public void setPeriodOfTime(long periodOfTime) {
 		this.periodOfTime = periodOfTime;
+	}
+	public Timestamp getLastTime() {
+		return lastTime;
+	}
+	public void setLastTime(Timestamp lastTime) {
+		this.lastTime = lastTime;
 	}
 
 }
