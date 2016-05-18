@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @CrossOrigin
 @RestController
-public class BrmhControllerService {
+public class BrmhControllerService2 {
 
 	private Connection getDBConnection() {
 		Connection dBConn = null;
@@ -65,12 +65,13 @@ public class BrmhControllerService {
 				System.out.println("Connection to DB successful!");
 				// make query to get count by time and section
 				StringBuilder query = new StringBuilder(
-						"SELECT count(DISTINCT mobile_mac), location FROM wifi_backup.mobile_location WHERE 1=1 ");
+						"SELECT count(DISTINCT mac_address), section_id FROM tracking2 WHERE 1=1 ");
+				//query.append("AND update_time >= ? AND update_time <= ? ");
 				query.append("AND time >= ? AND time <= ? ");
 				if(pSectionId > 0) {
-					query.append("AND location = ? ");
+					query.append("AND section_id = ? ");
 				}
-				query.append("GROUP BY location ");
+				query.append("GROUP BY section_id ");
 				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
 				stmt.setTimestamp(1, new Timestamp(fromTime));
 				stmt.setTimestamp(2, new Timestamp(toTime));
@@ -131,11 +132,13 @@ public class BrmhControllerService {
 				System.out.println("Connection to DB successful!");
 				// make query to get count by time and section
 				StringBuilder query = new StringBuilder(
-						"SELECT mobile_mac, time, location FROM wifi_backup.mobile_location WHERE 1=1 ");
+						"SELECT mac_address, time, section_id FROM tracking2 WHERE 1=1 ");
+				//query.append("AND update_time >= ? AND update_time <= ? ");
 				query.append("AND time >= ? AND time <= ? ");
 				if(pSectionId > 0) {
-					query.append("AND location = ? ");
+					query.append("AND section_id = ? ");
 				}
+				//query.append("ORDER BY update_time ASC ");
 				query.append("ORDER BY time ASC ");
 				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
 				stmt.setTimestamp(1, new Timestamp(pFromTime));
@@ -221,9 +224,10 @@ public class BrmhControllerService {
 				System.out.println("Connection to DB successful!");
 				// make query to get section list of this patient
 				StringBuilder query = new StringBuilder(
-						"SELECT DISTINCT location FROM wifi_backup.mobile_location WHERE 1=1 ");
+						"SELECT DISTINCT section_id FROM tracking2 WHERE 1=1 ");
+				//query.append("AND update_time >= ? AND update_time <= ? ");
 				query.append("AND time >= ? AND time <= ? ");
-				query.append("AND mobile_mac = ? ");
+				query.append("AND mac_address = ? ");
 				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
 				stmt.setTimestamp(1, new Timestamp(fromTime));
 				stmt.setTimestamp(2, new Timestamp(toTime));
@@ -277,9 +281,10 @@ public class BrmhControllerService {
 				System.out.println("Connection to DB successful!");
 				// make query to get detail by time and section
 				StringBuilder query = new StringBuilder(
-						"SELECT location, time FROM wifi_backup.mobile_location WHERE 1=1 ");
+						"SELECT section_id, time FROM tracking2 WHERE 1=1 ");
+				//query.append("AND update_time >= ? AND update_time <= ? ");
 				query.append("AND time >= ? AND time <= ? ");
-				query.append("AND mobile_mac = ? ");
+				query.append("AND mac_address = ? ");
 				query.append("ORDER BY time DESC ");
 				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
 				stmt.setTimestamp(1, new Timestamp(pFromTime));
@@ -430,22 +435,19 @@ public class BrmhControllerService {
 		return result;
 	}
 	
-	@RequestMapping(method = RequestMethod.POST, value = "/exportPeopleContacted")
-	public List<ExportEntity> exportPeopleContacted(
+	@RequestMapping(method = RequestMethod.POST, value = "/exportPeopleContacted", 
+			produces="text/csv")
+	public void exportPeopleContacted(
 			@RequestParam(required=true, name="paramList") String paramList,
 			@RequestParam(required=true, name="inspectMac") String inspectMac,
 			@RequestParam(required=false, name="fromTime") Long pFromTime,
 			@RequestParam(required=false, name="toTime") Long pToTime,
 			@RequestParam(required=true, name="level") int level,
-			@RequestParam(required=false, name="isExport") Integer isExport,
 			HttpServletResponse response) {
 		
 		//clean input
 		if(level < 1) {
 			level = 1; //default export 1-level
-		}
-		if(isExport == null) {
-			isExport = 1; //default is export
 		}
 		//define 3 maximum level
 		List<String> lsMacInLevel1 = new ArrayList<>();
@@ -471,10 +473,8 @@ public class BrmhControllerService {
 			}
 			lsMacExisted.addAll(lsMacInLevel2);
 			//loop through each mac address in level 2
-			System.out.println("level2 count: " + lsMacInLevel2.size());
 			for(String inspectMac2 : lsMacInLevel2) {
 				List<InspectEntity> lsInspectLevel2 = inspectMac(pFromTime, pToTime, inspectMac2);
-				System.out.println(inspectMac2 + ": " + lsInspectLevel2.size());
 				//make paramList
 				StringBuilder paramList2 = new StringBuilder();
 				for(InspectEntity inspect2 : lsInspectLevel2) {
@@ -489,41 +489,37 @@ public class BrmhControllerService {
 			}
 		}
 		//export to csv file
-		if(isExport == 1) {
-			String fileName = "patientInspect_" + System.currentTimeMillis() + ".csv";
-			try {
-				response.setContentType("text/csv");
-				response.setHeader("Content-Disposition", "attachment; filename=" + fileName);
-				OutputStreamWriter writer = new OutputStreamWriter(response.getOutputStream(), "UTF-8");
-				String exportDelimeter = ",";
-				String newLine = "\n";
-				StringBuilder out = new StringBuilder();
-				//header
-				out.append("Level").append(exportDelimeter).append("Inspect Mac").append(exportDelimeter)
-					.append("Contacted Mac").append(exportDelimeter).append("Section Id").append(exportDelimeter)
-					.append("From Time").append(exportDelimeter).append("To Time").append(newLine);
+		String fileName = "patientInspect_" + System.currentTimeMillis() + ".csv";
+		try {
+			response.setContentType("text/csv");
+			response.setHeader("Content-Disposition", "attachment; filename=" + fileName);
+			OutputStreamWriter writer = new OutputStreamWriter(response.getOutputStream(), "UTF-8");
+			String exportDelimeter = ",";
+			String newLine = "\n";
+			StringBuilder out = new StringBuilder();
+			//header
+			out.append("Level").append(exportDelimeter).append("Inspect Mac").append(exportDelimeter)
+				.append("Contacted Mac").append(exportDelimeter).append("Section Id").append(exportDelimeter)
+				.append("From Time").append(exportDelimeter).append("To Time").append(newLine);
+			writer.write(out.toString());
+			//data
+			SimpleDateFormat dfm = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA);
+			for(ExportEntity export : result) {
+				out = new StringBuilder();
+				out.append(export.getLevel()).append(exportDelimeter)
+					.append(export.getInspectMac()).append(exportDelimeter)
+					.append(export.getContactedMac()).append(exportDelimeter)
+					.append(export.getSectionId()).append(exportDelimeter)
+					.append(dfm.format(export.getFromTime())).append(exportDelimeter)
+					.append(dfm.format(export.getToTime())).append(newLine);
 				writer.write(out.toString());
-				//data
-				SimpleDateFormat dfm = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA);
-				for(ExportEntity export : result) {
-					out = new StringBuilder();
-					out.append(export.getLevel()).append(exportDelimeter)
-						.append(export.getInspectMac()).append(exportDelimeter)
-						.append(export.getContactedMac()).append(exportDelimeter)
-						.append(export.getSectionId()).append(exportDelimeter)
-						.append(dfm.format(export.getFromTime())).append(exportDelimeter)
-						.append(dfm.format(export.getToTime())).append(newLine);
-					writer.write(out.toString());
-				}
-				writer.flush();
-				writer.close();
-				return new ArrayList<>();
 			}
-			catch (Exception e) {
-				e.printStackTrace();
-			}
+			writer.flush();
+			writer.close();
 		}
-		return result;
+		catch (Exception e) {
+			e.printStackTrace();
+		}
 	}
 	
 	private List<ExportEntity> getResult2Export(String paramList, String inspectMac, 
@@ -586,9 +582,10 @@ public class BrmhControllerService {
 				System.out.println("Connection to DB successful!");
 				// make query to get detail by time and section
 				StringBuilder query = new StringBuilder(
-						"SELECT mobile_mac, time FROM wifi_backup.mobile_location WHERE 1=1 ");
+						"SELECT mac_address, time FROM tracking2 WHERE 1=1 ");
+				//query.append("AND update_time >= ? AND update_time <= ? ");
 				query.append("AND time >= ? AND time <= ? ");
-				query.append("AND location = ? ");
+				query.append("AND section_id = ? ");
 				query.append("ORDER BY time ASC ");
 				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
 				stmt.setTimestamp(1, new Timestamp(pFromTime));
@@ -671,9 +668,10 @@ public class BrmhControllerService {
 				System.out.println("Connection to DB successful!");
 				// make query to get detail by time and section
 				StringBuilder query = new StringBuilder(
-						"SELECT COUNT(DISTINCT mobile_mac), location FROM wifi_backup.mobile_location WHERE 1=1 ");
+						"SELECT COUNT(DISTINCT mac_address), section_id FROM tracking2 WHERE 1=1 ");
+				//query.append("AND update_time >= ? AND update_time <= ? ");
 				query.append("AND time >= ? AND time <= ? ");
-				query.append("GROUP BY location ");
+				query.append("GROUP BY section_id ");
 				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
 				stmt.setTimestamp(1, new Timestamp(pFromTime));
 				stmt.setTimestamp(2, new Timestamp(pToTime));
