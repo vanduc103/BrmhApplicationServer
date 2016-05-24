@@ -259,7 +259,9 @@ public class BrmhControllerService {
 	public List<InspectEntity> inspectMac(
 			@RequestParam(required=true, name="fromTime") Long pFromTime,
 			@RequestParam(required=true, name="toTime") Long pToTime,
-			@RequestParam(required=true, name="macAddress") String pMacAddress) {
+			@RequestParam(required=true, name="macAddress") String pMacAddress,
+			@RequestParam(required=false, name="pageIndex") Integer pageIndex,
+			@RequestParam(required=false, name="pageSize") Integer pageSize) {
 		
 		//result to return
 		List<InspectEntity> result = new ArrayList<>();
@@ -269,6 +271,12 @@ public class BrmhControllerService {
 		}
 		if(pToTime == null) {
 			pToTime = System.currentTimeMillis();
+		}
+		if(pageIndex == null || pageIndex < 1) {
+			pageIndex = 1;
+		}
+		if(pageSize == null || pageSize < 0) {
+			pageSize = 10;
 		}
 		
 		Connection dBConn = getDBConnection();
@@ -309,8 +317,8 @@ public class BrmhControllerService {
 				int detectLimit = 2; //count limit to detect sudden change
 				int count = 0;
 				int preSection = 0;
-				List<TrackingEntity> omitList = new ArrayList<>();
 				int llTimeInSectionSize = llTimeInSection.size();
+				/*List<TrackingEntity> omitList = new ArrayList<>();
 				for(int i = 0; i < llTimeInSectionSize; i++) {
 					TrackingEntity tracking = llTimeInSection.get(i);
 					int sectionId = tracking.getSectionId();
@@ -339,7 +347,7 @@ public class BrmhControllerService {
 					}
 				}
 				//remove omit element
-				llTimeInSection.removeAll(omitList);
+				llTimeInSection.removeAll(omitList);*/
 				
 				//process data to get the result
 				preSection = 0;
@@ -360,15 +368,16 @@ public class BrmhControllerService {
 					if(sectionId != preSection) {
 						//update result of previous section
 						InspectEntity inspect = new InspectEntity();
+						inspect.setMacAddress(pMacAddress);
 						inspect.setSectionId(preSection);
 						inspect.setFromTime(fromTime);
 						inspect.setToTime(toTime);
 						result.add(inspect);
+						sectionList.add(preSection);
 						//reset previous section, toTime
 						preSection = sectionId;
 						toTime = tracking.getUpdateTime();
 						fromTime = toTime;
-						sectionList.add(preSection);
 					}
 					//otherwise set fromTime to find the last from time
 					else {
@@ -377,15 +386,33 @@ public class BrmhControllerService {
 					//if the last element -> add to result
 					if(i == llTimeInSectionSize - 1) {
 						InspectEntity inspect = new InspectEntity();
+						inspect.setMacAddress(pMacAddress);
 						inspect.setSectionId(sectionId);
 						inspect.setFromTime(fromTime);
 						inspect.setToTime(toTime);
 						//set section list
-						sectionList.add(preSection);
+						sectionList.add(sectionId);
 						inspect.setSectionList(sectionList);
 						result.add(inspect);
 					}
 				}
+				//return result by paging
+				int totalResult = result.size();
+				int fromIndex = (pageIndex - 1) * pageSize;
+				if(fromIndex >= totalResult) {
+					fromIndex = (totalResult - 1) < 0 ? 0 : totalResult - 1;
+				}
+				int toIndex = fromIndex + pageSize; 
+				if(toIndex > totalResult) {
+					toIndex = totalResult;
+				}
+				List<InspectEntity> paging = result.subList(fromIndex, toIndex);
+				//set total result to last element
+				if(paging.size() > 0) {
+					paging.get(paging.size() - 1).setTotalResult(totalResult);
+					paging.get(paging.size() - 1).setSectionList(sectionList);
+				}
+				result = paging;
 				
 			} catch (SQLException e) {
 				e.printStackTrace();
@@ -399,6 +426,7 @@ public class BrmhControllerService {
 				}
 			}
 		}
+		
 		return result;
 	}
 	
@@ -473,7 +501,7 @@ public class BrmhControllerService {
 			//loop through each mac address in level 2
 			System.out.println("level2 count: " + lsMacInLevel2.size());
 			for(String inspectMac2 : lsMacInLevel2) {
-				List<InspectEntity> lsInspectLevel2 = inspectMac(pFromTime, pToTime, inspectMac2);
+				List<InspectEntity> lsInspectLevel2 = inspectMac(pFromTime, pToTime, inspectMac2, 1, Integer.MAX_VALUE);
 				System.out.println(inspectMac2 + ": " + lsInspectLevel2.size());
 				//make paramList
 				StringBuilder paramList2 = new StringBuilder();
@@ -568,7 +596,9 @@ public class BrmhControllerService {
 	public List<TrackingEntity> inspectSection(
 			@RequestParam(required=true, name="fromTime") Long pFromTime,
 			@RequestParam(required=true, name="toTime") Long pToTime,
-			@RequestParam(required=true, name="sectionId") int pSectionId) {
+			@RequestParam(required=true, name="sectionId") int pSectionId,
+			@RequestParam(required=false, name="pageIndex") Integer pageIndex,
+			@RequestParam(required=false, name="pageSize") Integer pageSize) {
 		
 		//result to return
 		List<TrackingEntity> result = new ArrayList<>();
@@ -578,6 +608,12 @@ public class BrmhControllerService {
 		}
 		if(pToTime == null) {
 			pToTime = System.currentTimeMillis();
+		}
+		if(pageIndex == null || pageIndex < 1) {
+			pageIndex = 1;
+		}
+		if(pageSize == null || pageSize < 0) {
+			pageSize = 10;
 		}
 		
 		Connection dBConn = getDBConnection();
@@ -634,10 +670,26 @@ public class BrmhControllerService {
 					tracking.setLastTime(timeInSection.getLast());
 					result.add(tracking);
 				}
+				//return result by paging
+				int totalResult = result.size();
+				int fromIndex = (pageIndex - 1) * pageSize;
+				if(fromIndex >= totalResult) {
+					fromIndex = (totalResult - 1) < 0 ? 0 : totalResult - 1;
+				}
+				int toIndex = fromIndex + pageSize; 
+				if(toIndex > totalResult) {
+					toIndex = totalResult;
+				}
+				List<TrackingEntity> paging = result.subList(fromIndex, toIndex);
+				//set total result to last element
+				if(paging.size() > 0) {
+					paging.get(paging.size() - 1).setTotalResult(totalResult);
+				}
+				result = paging;
 				
 			} catch (SQLException e) {
-				e.printStackTrace();
 				System.err.println("Query failed!");
+				e.printStackTrace();
 			}
 			finally {
 				try {
@@ -653,7 +705,9 @@ public class BrmhControllerService {
 	@RequestMapping(method = RequestMethod.GET, value = "/inspectTime")
 	public List<TrackingEntity> inspectTime(
 			@RequestParam(required=true, name="fromTime") Long pFromTime,
-			@RequestParam(required=true, name="toTime") Long pToTime) {
+			@RequestParam(required=true, name="toTime") Long pToTime,
+			@RequestParam(required=false, name="pageIndex") Integer pageIndex,
+			@RequestParam(required=false, name="pageSize") Integer pageSize) {
 		
 		//result to return
 		List<TrackingEntity> result = new ArrayList<>();
@@ -663,6 +717,12 @@ public class BrmhControllerService {
 		}
 		if(pToTime == null) {
 			pToTime = System.currentTimeMillis();
+		}
+		if(pageIndex == null || pageIndex < 1) {
+			pageIndex = 1;
+		}
+		if(pageSize == null || pageSize < 0) {
+			pageSize = 10;
 		}
 		
 		Connection dBConn = getDBConnection();
@@ -691,6 +751,22 @@ public class BrmhControllerService {
 				}
 				rs.close();
 				stmt.close();
+				//return result by paging
+				int totalResult = result.size();
+				int fromIndex = (pageIndex - 1) * pageSize;
+				if(fromIndex >= totalResult) {
+					fromIndex = (totalResult - 1) < 0 ? 0 : totalResult - 1;
+				}
+				int toIndex = fromIndex + pageSize; 
+				if(toIndex > totalResult) {
+					toIndex = totalResult;
+				}
+				List<TrackingEntity> paging = result.subList(fromIndex, toIndex);
+				//set total result to last element
+				if(paging.size() > 0) {
+					paging.get(paging.size() - 1).setTotalResult(totalResult);
+				}
+				result = paging;
 				
 			} catch (SQLException e) {
 				e.printStackTrace();
