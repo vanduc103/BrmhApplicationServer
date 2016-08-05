@@ -13,13 +13,16 @@ public class DataSource {
 
 	private DataSource() throws IOException, SQLException, PropertyVetoException {
 		cpds = new ComboPooledDataSource();
-		//cpds.setDriverClass("com.mysql.jdbc.Driver"); // loads the jdbc driver
-		//cpds.setJdbcUrl("jdbc:mysql://147.47.206.15:13306/brmh_test?characterEncoding=utf8");
-		//cpds.setUser("root");
-		//cpds.setPassword("duclv");
-		cpds.setJdbcUrl("jdbc:sap://147.47.206.15:30215/?autocommit=false");
+		cpds.setDriverClass("com.mysql.jdbc.Driver"); // loads the jdbc driver
+		/*cpds.setJdbcUrl("jdbc:mysql://147.47.206.15:13306/wifi?characterEncoding=utf8");
+		cpds.setUser("root");
+		cpds.setPassword("duclv");*/
+		cpds.setJdbcUrl("jdbc:mysql://222.112.102.98:3306/blackbox?characterEncoding=utf8");
+		cpds.setUser("sigma");
+		cpds.setPassword("wonderfull");
+		/*cpds.setJdbcUrl("jdbc:sap://147.47.206.15:30215/?autocommit=false");
 		cpds.setUser("SYSTEM");
-		cpds.setPassword("manager");
+		cpds.setPassword("manager");*/
 
 		// the settings below are optional -- c3p0 can work with defaults
 		cpds.setMinPoolSize(10);

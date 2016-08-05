@@ -27,8 +27,43 @@ import org.springframework.web.bind.annotation.RestController;
 @CrossOrigin
 @RestController
 public class BrmhControllerService {
+	
+	static Map<String, Integer> mapMacClassification = new HashMap<>();
+	/*static {
+		//get mobile mac classification data
+		Connection dBConn = getDBConnection();
+		if (dBConn != null) {
+			try {
+				System.out.println("Connection to DB successful!");
+				StringBuilder query = new StringBuilder(
+						"SELECT mobile_mac, classification FROM mobile_mac_classify WHERE 1=1 ");
+				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
+				
+				ResultSet rs = stmt.executeQuery();
+				while(rs.next()) {
+					String mobileMac = rs.getString(1);
+					int classification = rs.getInt(2);
+					//put to map
+					mapMacClassification.put(mobileMac, classification);
+				}
+				rs.close();
+				stmt.close();
+				
+			} catch (SQLException e) {
+				e.printStackTrace();
+				System.err.println("Query failed!");
+			}
+			finally {
+				try {
+					dBConn.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}*/
 
-	private Connection getDBConnection() {
+	private static Connection getDBConnection() {
 		Connection dBConn = null;
 		try {
 			DataSource ds = DataSource.getInstance();
@@ -65,12 +100,13 @@ public class BrmhControllerService {
 				System.out.println("Connection to DB successful!");
 				// make query to get count by time and section
 				StringBuilder query = new StringBuilder(
-						"SELECT count(DISTINCT mobile_mac), location FROM wifi_backup.mobile_location WHERE 1=1 ");
+						//"SELECT count(DISTINCT mobile_mac), location FROM mobile_location WHERE 1=1 ");
+						"SELECT count(DISTINCT mobile_mac), Sensor_id FROM mobile_data WHERE 1=1 ");
 				query.append("AND time >= ? AND time <= ? ");
 				if(pSectionId > 0) {
-					query.append("AND location = ? ");
+					query.append("AND Sensor_id = ? ");
 				}
-				query.append("GROUP BY location ");
+				query.append("GROUP BY Sensor_id ");
 				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
 				stmt.setTimestamp(1, new Timestamp(fromTime));
 				stmt.setTimestamp(2, new Timestamp(toTime));
@@ -131,10 +167,11 @@ public class BrmhControllerService {
 				System.out.println("Connection to DB successful!");
 				// make query to get count by time and section
 				StringBuilder query = new StringBuilder(
-						"SELECT mobile_mac, time, location FROM wifi_backup.mobile_location WHERE 1=1 ");
+						//"SELECT mobile_mac, time, location FROM mobile_location WHERE 1=1 ");
+						"SELECT mobile_mac, time, Sensor_id FROM mobile_data WHERE 1=1 ");
 				query.append("AND time >= ? AND time <= ? ");
 				if(pSectionId > 0) {
-					query.append("AND location = ? ");
+					query.append("AND Sensor_id = ? ");
 				}
 				query.append("ORDER BY time ASC ");
 				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
@@ -163,8 +200,8 @@ public class BrmhControllerService {
 				stmt.close();
 				//process to get people first time and period of time
 				Set<String> keySet = macInSection.keySet();
-				for(String key : keySet) {
-					LinkedList<Timestamp> timeInSection = macInSection.get(key);
+				for(String macAddress : keySet) {
+					LinkedList<Timestamp> timeInSection = macInSection.get(macAddress);
 					//calculate period of time by adding all time interval
 					long periodOfTime = 0l;
 					Timestamp firstTime = timeInSection.get(0);
@@ -176,11 +213,12 @@ public class BrmhControllerService {
 					//System.out.println("mac= " + key + ". Period of time= " + periodOfTime);
 					//add to result
 					TrackingEntity tracking = new TrackingEntity();
-					tracking.setMacAddress(key);
+					tracking.setMacAddress(macAddress);
 					tracking.setSectionId(pSectionId);
 					tracking.setFirstTime(timeInSection.getFirst());
 					tracking.setLastTime(timeInSection.getLast());
 					tracking.setPeriodOfTime(periodOfTime);
+					//tracking.setMacClass(mapMacClassification.get(macAddress));
 					result.add(tracking);
 				}
 				
@@ -221,7 +259,8 @@ public class BrmhControllerService {
 				System.out.println("Connection to DB successful!");
 				// make query to get section list of this patient
 				StringBuilder query = new StringBuilder(
-						"SELECT DISTINCT location FROM wifi_backup.mobile_location WHERE 1=1 ");
+						//"SELECT DISTINCT location FROM mobile_location WHERE 1=1 ");
+						"SELECT DISTINCT Sensor_id FROM mobile_data WHERE 1=1 ");
 				query.append("AND time >= ? AND time <= ? ");
 				query.append("AND mobile_mac = ? ");
 				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
@@ -285,7 +324,8 @@ public class BrmhControllerService {
 				System.out.println("Connection to DB successful!");
 				// make query to get detail by time and section
 				StringBuilder query = new StringBuilder(
-						"SELECT location, time FROM wifi_backup.mobile_location WHERE 1=1 ");
+						//"SELECT location, time FROM mobile_location WHERE 1=1 ");
+						"SELECT Sensor_id, time FROM mobile_data WHERE 1=1 ");
 				query.append("AND time >= ? AND time <= ? ");
 				query.append("AND mobile_mac = ? ");
 				query.append("ORDER BY time DESC ");
@@ -622,9 +662,10 @@ public class BrmhControllerService {
 				System.out.println("Connection to DB successful!");
 				// make query to get detail by time and section
 				StringBuilder query = new StringBuilder(
-						"SELECT mobile_mac, time FROM wifi_backup.mobile_location WHERE 1=1 ");
+						//"SELECT mobile_mac, time FROM mobile_location WHERE 1=1 ");
+						"SELECT mobile_mac, time FROM mobile_data WHERE 1=1 ");
 				query.append("AND time >= ? AND time <= ? ");
-				query.append("AND location = ? ");
+				query.append("AND Sensor_id = ? ");
 				query.append("ORDER BY time ASC ");
 				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
 				stmt.setTimestamp(1, new Timestamp(pFromTime));
@@ -731,9 +772,10 @@ public class BrmhControllerService {
 				System.out.println("Connection to DB successful!");
 				// make query to get detail by time and section
 				StringBuilder query = new StringBuilder(
-						"SELECT COUNT(DISTINCT mobile_mac), location FROM wifi_backup.mobile_location WHERE 1=1 ");
+						//"SELECT COUNT(DISTINCT mobile_mac), location FROM mobile_location WHERE 1=1 ");
+						"SELECT COUNT(DISTINCT mobile_mac), Sensor_id FROM mobile_data WHERE 1=1 ");
 				query.append("AND time >= ? AND time <= ? ");
-				query.append("GROUP BY location ");
+				query.append("GROUP BY Sensor_id ");
 				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
 				stmt.setTimestamp(1, new Timestamp(pFromTime));
 				stmt.setTimestamp(2, new Timestamp(pToTime));

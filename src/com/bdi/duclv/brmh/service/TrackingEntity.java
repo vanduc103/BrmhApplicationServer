@@ -16,6 +16,7 @@ public class TrackingEntity implements Serializable{
 	private Timestamp lastTime;
 	private long periodOfTime;
 	private int totalResult;
+	private int macClass = 0;
 	
 	public long getId() {
 		return id;
@@ -76,6 +77,12 @@ public class TrackingEntity implements Serializable{
 	}
 	public void setTotalResult(int totalResult) {
 		this.totalResult = totalResult;
+	}
+	public int getMacClass() {
+		return macClass;
+	}
+	public void setMacClass(int macClass) {
+		this.macClass = macClass;
 	}
 
 }
